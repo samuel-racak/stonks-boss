@@ -19,8 +19,3 @@ try:
 except ValidationError as e:
     print("Configuration error:", e)
     exit(1)
-
-# Access validated config values
-print(config.DISCORD_TOKEN)
-print(config.COMMAND_PREFIX)
-print(config.DEBUG_MODE)
