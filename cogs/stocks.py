@@ -2,13 +2,6 @@ from discord.ext import commands
 from discord import app_commands, Embed, File
 import yfinance as yf
 
-
-# Libraries for creating session, rate limiting and caching
-from requests import Session
-from requests_cache import CacheMixin, SQLiteCache
-from requests_ratelimiter import LimiterMixin, MemoryQueueBucket
-from pyrate_limiter import Duration, RequestRate, Limiter
-
 # Libraries for creating graphs
 import io
 import os
@@ -19,22 +12,6 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
 
 # import pandas as pd
-
-
-class CachedLimiterSession(CacheMixin, LimiterMixin, Session):
-    def __init__(self):
-        # Set up the rate limiter and caching backend
-        limiter = Limiter(RequestRate(2, Duration.SECOND * 5))
-        backend = SQLiteCache("yfinance.cache")
-
-        # Initialize the parent classes with the limiter and caching backend
-        super().__init__(
-            limiter=limiter, bucket_class=MemoryQueueBucket, backend=backend
-        )
-
-
-# Initialize a single cached and rate-limited session
-session = CachedLimiterSession()
 
 
 class FinanceCog(commands.Cog):
