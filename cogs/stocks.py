@@ -11,7 +11,11 @@ import tempfile
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
 
-# import pandas as pd
+# Import utils
+from cogs.utils import is_valid_ticker, get_country_flag
+
+# Import constants
+from constants import EMBED_COLOR_PRIMARY, FOOTER_TEXT
 
 
 class StocksCog(commands.Cog):
@@ -23,6 +27,8 @@ class StocksCog(commands.Cog):
     def __init__(self, bot, session):
         self.bot = bot
         # Use a single session across the class to cache and limit requests
+        # (session is created in main.py and added through the bot instance)
+        # TODO: Think about this
         self.session = session
 
     @app_commands.command(
@@ -44,21 +50,20 @@ class StocksCog(commands.Cog):
     async def price(self, interaction, ticker: str, period: str = "1mo"):
         """Fetch current price for the specified ticker."""
         await interaction.response.defer()
-        if not self.is_valid_ticker(ticker):
+        if not is_valid_ticker(ticker, session=self.session):
             await interaction.followup.send(
                 f"The ticker '{ticker}' does not exist. Please check and try again."
             )
             return
 
         try:
-            image_stream = self.get_price_graph(ticker, period)
-
             print(f"Ticker type in PRICE: {type(ticker)}")  # Should be <class 'str'>
+            image_stream = self.get_price_graph(ticker, period)
 
             embed = Embed(
                 title=f"{ticker.upper()} Price Overview",
                 description="Price data for the last month",
-                color=0x3498DB,
+                color=EMBED_COLOR_PRIMARY,
             )
             embed.set_image(
                 url="attachment://price_animation.gif"
@@ -73,7 +78,7 @@ class StocksCog(commands.Cog):
                 name="Current Price", value=f"{current_price} USD", inline=True
             )
             embed.add_field(name="Market Cap", value=f"{market_cap} USD", inline=True)
-            embed.set_footer(text="Data provided by Yahoo Finance API")
+            embed.set_footer(text=FOOTER_TEXT)
 
             await interaction.followup.send(
                 embed=embed,
@@ -90,7 +95,7 @@ class StocksCog(commands.Cog):
     async def basic_info(self, interaction, ticker: str):
         """Fetch name, sector, country, market_cap and currency for the specified ticker."""
         await interaction.response.defer()
-        if not self.is_valid_ticker(ticker):
+        if not is_valid_ticker(ticker, session=self.session):
             await interaction.followup.send(
                 f"The ticker '{ticker}' is not valid. Please check and try again."
             )
@@ -103,50 +108,29 @@ class StocksCog(commands.Cog):
             country = info["country"]
             market_cap = info["marketCap"]
             currency = info["currency"]
-            await interaction.followup.send(
-                f"Basic information for {ticker}:\n"
-                f"Name: {name}\n"
-                f"Sector: {sector}\n"
-                f"Country: {country}\n"
-                f"Market Cap: {market_cap} {currency}"
+
+            # Get the flag for the country code if it exists
+            country_code = info.get("country")  # Adjust this field if it's different
+            country_flag = get_country_flag(country_code)
+            country_display = f"{country_flag} {country}" if country_flag else country
+
+            # Create an embed to display the basic information
+            embed = Embed(
+                title=f"Basic Information for {ticker.upper()}",
+                color=EMBED_COLOR_PRIMARY,
             )
+            embed.add_field(name="Name", value=name, inline=False)
+            embed.add_field(name="Sector", value=sector, inline=True)
+            embed.add_field(name="Country", value=country_display, inline=True)
+            embed.add_field(
+                name="Market Cap", value=f"{market_cap:,} {currency}", inline=False
+            )
+            embed.set_footer(text=FOOTER_TEXT)
+
+            await interaction.followup.send(embed=embed)
+
         except Exception as e:
             await interaction.followup.send(f"An error occurred: {str(e)}")
-
-    @app_commands.command(
-        name="bollinger",
-        description="Calculate Bollinger Bands for a given ticker symbol.",
-    )
-    async def bollinger(self, interaction, ticker: str):
-        """Fetch Bollinger Bands for the specified ticker."""
-        await interaction.response.defer()
-        if not self.is_valid_ticker(ticker):
-            await interaction.followup.send(
-                f"The ticker '{ticker}' is not valid. Please check and try again."
-            )
-            return
-
-        try:
-            data = self.get_bollinger_bands(ticker)
-            await interaction.followup.send(f"Bollinger Bands for {ticker}:\n{data}")
-        except Exception as e:
-            await interaction.followup.send(f"An error occurred: {str(e)}")
-
-    def is_valid_ticker(self, ticker):
-        """Check if the ticker is valid by attempting to fetch data."""
-        try:
-            stock_data = yf.Ticker(ticker, session=self.session)
-            info = stock_data.info
-
-            print(f"Ticker type IS_VALID: {type(ticker)}")  # Should be <class 'str'>
-
-            return (
-                info is not None
-                and "symbol" in info
-                and info["symbol"] == ticker.upper()
-            )
-        except Exception:
-            return False
 
     def get_current_price(self, ticker):
         """Fetch the current stock price using yfinance."""
@@ -218,23 +202,6 @@ class StocksCog(commands.Cog):
         stock_data = yf.Ticker(ticker, session=self.session)
         info = stock_data.info
         return info
-
-    def get_bollinger_bands(self, ticker):
-        """Calculate Bollinger Bands for the specified ticker."""
-        # Fetch historical data
-        stock_data = yf.download(ticker, period="1mo", interval="1d")
-
-        # Calculate the rolling mean and rolling standard deviation
-        stock_data["MA"] = stock_data["Close"].rolling(window=20).mean()
-        stock_data["STD"] = stock_data["Close"].rolling(window=20).std()
-
-        # Calculate Bollinger Bands
-        stock_data["Upper Band"] = stock_data["MA"] + (stock_data["STD"] * 2)
-        stock_data["Lower Band"] = stock_data["MA"] - (stock_data["STD"] * 2)
-
-        # Return the most recent values
-        latest_data = stock_data[["Close", "Upper Band", "Lower Band"]].tail(1)
-        return latest_data.to_string(index=False)
 
 
 # Called when the cog is loaded
