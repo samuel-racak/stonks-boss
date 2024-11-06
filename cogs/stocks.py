@@ -12,7 +12,12 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
 
 # Import utils
-from cogs.utils import is_valid_ticker, get_country_flag
+from cogs.utils import (
+    is_valid_ticker,
+    get_country_flag,
+    get_full_ticker,
+    exchange_suffixes,
+)
 
 # Import constants
 from constants import EMBED_COLOR_PRIMARY, FOOTER_TEXT
@@ -33,11 +38,12 @@ class StocksCog(commands.Cog):
 
     @app_commands.command(
         name="price",
-        description="Get current price for a given ticker symbol.",
+        description="Get price for a given ticker symbol.",
     )
     @app_commands.describe(
         ticker="The ticker symbol of the stock",
         period="Time period for the data (e.g., '1mo', '3mo')",
+        exchange="The stock exchange where the ticker is listed",
     )
     @app_commands.choices(
         period=[
@@ -47,9 +53,19 @@ class StocksCog(commands.Cog):
             app_commands.Choice(name="1 year", value="1y"),
         ]
     )
-    async def price(self, interaction, ticker: str, period: str = "1mo"):
+    @app_commands.choices(
+        exchange=[
+            app_commands.Choice(name=exchange, value=exchange)
+            for exchange in exchange_suffixes.keys()
+        ]
+    )
+    async def price(
+        self, interaction, ticker: str, period: str = "1mo", exchange: str = "NYSE"
+    ):
         """Fetch current price for the specified ticker."""
         await interaction.response.defer()
+        ticker = get_full_ticker(ticker, exchange)
+
         if not is_valid_ticker(ticker, session=self.session):
             await interaction.followup.send(
                 f"The ticker '{ticker}' does not exist. Please check and try again."
@@ -62,7 +78,7 @@ class StocksCog(commands.Cog):
 
             embed = Embed(
                 title=f"{ticker.upper()} Price Overview",
-                description="Price data for the last month",
+                description=f"Price data for the last {period}",
                 color=EMBED_COLOR_PRIMARY,
             )
             embed.set_image(
@@ -146,7 +162,7 @@ class StocksCog(commands.Cog):
 
         # Initialize the figure and axis
         fig, ax = plt.subplots(figsize=(10, 5))
-        ax.set_title(f"{ticker.upper()} Price (Last Month)")
+        ax.set_title(f"{ticker.upper()} Price ({period})")
         ax.set_xlabel("Date")
         ax.set_ylabel("Price (USD)")
         ax.set_xlim(data.index[0], data.index[-1])
