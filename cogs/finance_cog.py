@@ -3,7 +3,7 @@ from discord import app_commands, Embed, File
 import yfinance as yf
 
 
-# Libraries for rate limiting and caching
+# Libraries for creating session, rate limiting and caching
 from requests import Session
 from requests_cache import CacheMixin, SQLiteCache
 from requests_ratelimiter import LimiterMixin, MemoryQueueBucket
@@ -47,7 +47,19 @@ class FinanceCog(commands.Cog):
         name="price",
         description="Get current price for a given ticker symbol.",
     )
-    async def price(self, interaction, ticker: str):
+    @app_commands.describe(
+        ticker="The ticker symbol of the stock",
+        period="Time period for the data (e.g., '1mo', '3mo')",
+    )
+    @app_commands.choices(
+        period=[
+            app_commands.Choice(name="1 month", value="1mo"),
+            app_commands.Choice(name="3 months", value="3mo"),
+            app_commands.Choice(name="6 months", value="6mo"),
+            app_commands.Choice(name="1 year", value="1y"),
+        ]
+    )
+    async def price(self, interaction, ticker: str, period: str = "1mo"):
         """Fetch current price for the specified ticker."""
         await interaction.response.defer()
         if not self.is_valid_ticker(ticker):
@@ -57,7 +69,7 @@ class FinanceCog(commands.Cog):
             return
 
         try:
-            image_stream = self.get_price_graph(ticker)
+            image_stream = self.get_price_graph(ticker, period)
 
             print(f"Ticker type in PRICE: {type(ticker)}")  # Should be <class 'str'>
 
@@ -183,14 +195,18 @@ class FinanceCog(commands.Cog):
             x_data = data.index[:frame]
             y_data = data["Close"][:frame]
 
-            # Determine the color based on the previous day's price change
-            if frame > 1:
-                price_change = data["Close"].iloc[frame] - data["Close"].iloc[frame - 1]
-                if price_change > 0:
-                    line.set_color("green")  # Green for price increase
-                else:
-                    line.set_color("red")  # Red for price decrease
+            # Check the overall price change for the entire period at the start
+            if frame == 1:
+                # Calculate the price change for the whole period (from start to end)
+                price_change = data["Close"].iloc[-1] - data["Close"].iloc[0]
 
+                # If price increased, set the color to green, else red
+                if price_change > 0:
+                    line.set_color("green")  # Green for overall price increase
+                else:
+                    line.set_color("red")  # Red for overall price decrease
+
+            # Update the data for the line
             line.set_data(x_data, y_data)
             return (line,)
 
@@ -200,7 +216,7 @@ class FinanceCog(commands.Cog):
         # Save the animation to a temporary file
         with tempfile.NamedTemporaryFile(suffix=".gif", delete=False) as temp_file:
             temp_path = temp_file.name
-            writer = PillowWriter(fps=10)
+            writer = PillowWriter(fps=60)
             anim.save(temp_path, writer=writer, dpi=80)  # Save the animation as GIF
 
         # Save the animation to a BytesIO object
