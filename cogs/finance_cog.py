@@ -1,11 +1,32 @@
 from discord.ext import commands
 from discord import app_commands
-import yfinance as yf  # To fetch financial data
+import yfinance as yf
+
+from requests_cache import SQLiteCache
+from requests_ratelimiter import LimiterMixin, MemoryQueueBucket
+from requests import Session
+from pyrate_limiter import Duration, RequestRate, Limiter
+
+
+# Create a custom session class that includes caching and rate limiting
+class CachedLimiterSession(LimiterMixin, Session):
+    def __init__(self):
+        super().__init__()
+        # Set up caching backend and limit requests to 2 requests per 5 seconds
+        self.limiter = Limiter(RequestRate(2, Duration.SECOND * 5))
+        self.bucket_class = MemoryQueueBucket
+        self.cache = SQLiteCache("yfinance.cache")
+
+
+# Initialize a single cached and rate-limited session
+session = CachedLimiterSession()
 
 
 class FinanceCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        # Use a single session across the class to cache and limit requests
+        self.session = session
 
     @app_commands.command(
         name="price",
@@ -80,24 +101,19 @@ class FinanceCog(commands.Cog):
     def is_valid_ticker(self, ticker):
         """Check if the ticker is valid by attempting to fetch data."""
         try:
-            stock_data = yf.Ticker(ticker)
-            print(stock_data)
-
-            # If we can fetch info, the ticker is valid
+            stock_data = yf.Ticker(ticker, session=self.session)
             info = stock_data.info
             return (
                 info is not None
                 and "symbol" in info
                 and info["symbol"] == ticker.upper()
-                # and stock_data.history(period="1d")
-                is not None  # Check if the price is available (might have been delisted)
             )
-        except Exception as e:
+        except Exception:
             return False
 
     def get_current_price(self, ticker):
-        # Fetch the current stock price using yfinance
-        stock_data = yf.Ticker(ticker)
+        """Fetch the current stock price using yfinance."""
+        stock_data = yf.Ticker(ticker, session=self.session)
         history = stock_data.history(period="1d")
         if history.empty:
             raise ValueError(f"No data found for ticker '{ticker}'")
@@ -106,7 +122,7 @@ class FinanceCog(commands.Cog):
 
     def get_basic_info(self, ticker):
         """Fetch basic information for the specified ticker."""
-        stock_data = yf.Ticker(ticker)
+        stock_data = yf.Ticker(ticker, session=self.session)
         info = stock_data.info
         return info
 
