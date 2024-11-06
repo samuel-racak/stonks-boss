@@ -91,7 +91,9 @@ class StocksCog(commands.Cog):
             market_cap = ticker_info.info["marketCap"]
 
             embed.add_field(
-                name="Current Price", value=f"{current_price} USD", inline=True
+                name="Current Price",
+                value=f"{round(current_price, 2)} USD",
+                inline=True,
             )
             embed.add_field(name="Market Cap", value=f"{market_cap} USD", inline=True)
             embed.set_footer(text=FOOTER_TEXT)
