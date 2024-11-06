@@ -36,6 +36,7 @@ bot.session = session
 async def on_ready():
     # Pass session to the cog when loading it
     await bot.load_extension("cogs.stocks")
+    await bot.load_extension("cogs.analysis")
     await bot.tree.sync()
     print(f"{bot.user.name} has connected to Discord!")
 
