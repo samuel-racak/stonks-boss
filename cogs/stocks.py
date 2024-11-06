@@ -14,8 +14,13 @@ from matplotlib.animation import FuncAnimation, PillowWriter
 # import pandas as pd
 
 
-class FinanceCog(commands.Cog):
-    def __init__(self, bot):
+class StocksCog(commands.Cog):
+    """
+    A cog for fetching stock data using the Yahoo Finance API.
+    This cog provides basic commands aimed at absolute basics such as current_price, name, sector, country, market cap, and currency.
+    """
+
+    def __init__(self, bot, session):
         self.bot = bot
         # Use a single session across the class to cache and limit requests
         self.session = session
@@ -83,7 +88,7 @@ class FinanceCog(commands.Cog):
         description="Get basic information for a given ticker symbol.",
     )
     async def basic_info(self, interaction, ticker: str):
-        """Fetch basic information for the specified ticker."""
+        """Fetch name, sector, country, market_cap and currency for the specified ticker."""
         await interaction.response.defer()
         if not self.is_valid_ticker(ticker):
             await interaction.followup.send(
@@ -232,5 +237,6 @@ class FinanceCog(commands.Cog):
         return latest_data.to_string(index=False)
 
 
+# Called when the cog is loaded
 async def setup(bot):
-    await bot.add_cog(FinanceCog(bot))
+    await bot.add_cog(StocksCog(bot, bot.session))
