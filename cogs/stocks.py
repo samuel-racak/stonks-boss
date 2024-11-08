@@ -135,9 +135,10 @@ class StocksCog(commands.Cog):
             for exchange in exchange_suffixes.keys()
         ]
     )
-    async def basic_info(self, interaction, ticker: str):
+    async def basic_info(self, interaction, ticker: str, exchange: str = "NYSE"):
         """Fetch name, sector, country, market_cap and currency for the specified ticker."""
         await interaction.response.defer()
+        ticker = get_full_ticker(ticker, exchange)
         if not is_valid_ticker(ticker, session=self.session):
             await interaction.followup.send(
                 f"The ticker '{ticker}' is not valid. Please check and try again."
