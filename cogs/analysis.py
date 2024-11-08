@@ -13,7 +13,7 @@ from constants import EMBED_COLOR_PRIMARY, FOOTER_TEXT
 class AnalysisCog(commands.Cog):
     """
     A cog for fetching stock data using the Yahoo Finance API.
-    This cog provides basic commands aimed at absolute basics such as current_price, name, sector, country, market cap, and currency.
+    This cog provides basic commands aimed at ticker analysis such as bollinger.
     """
 
     def __init__(self, bot, session):
