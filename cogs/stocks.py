@@ -1,15 +1,25 @@
 from discord.ext import commands
 from discord import app_commands, Embed, File
-import yfinance as yf
 
 # Libraries for creating graphs
 import io
 import os
 import tempfile
 
+# Libaries for fetching data
+import yfinance as yf
+
+# Libararies for multi-threading
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+
 # Graphs
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
+
+plt.switch_backend(
+    "Agg"
+)  # Change the backend to Agg to avoid displaying the graph (use on backend)
 
 # Import utils
 from cogs.utils import (
@@ -35,6 +45,14 @@ class StocksCog(commands.Cog):
         # (session is created in main.py and added through the bot instance)
         # TODO: Think about this
         self.session = session
+        self.executor = (
+            ThreadPoolExecutor()
+        )  # Create a ThreadPoolExecutor for multi-threading
+
+    async def run_in_executor(self, func, *args, **kwargs):
+        """Run a function in a separate thread using the ThreadPoolExecutor."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self.executor, func, *args, **kwargs)
 
     @app_commands.command(
         name="price",
@@ -73,8 +91,9 @@ class StocksCog(commands.Cog):
             return
 
         try:
-            print(f"Ticker type in PRICE: {type(ticker)}")  # Should be <class 'str'>
-            image_stream = self.get_price_graph(ticker, period)
+            image_stream = await self.run_in_executor(
+                self.get_price_graph, ticker, period
+            )
 
             embed = Embed(
                 title=f"{ticker.upper()} Price Overview",
@@ -92,7 +111,7 @@ class StocksCog(commands.Cog):
 
             embed.add_field(
                 name="Current Price",
-                value=f"{round(current_price, 2)} USD",
+                value=f"{current_price} USD",
                 inline=True,
             )
             embed.add_field(name="Market Cap", value=f"{market_cap} USD", inline=True)
@@ -157,7 +176,7 @@ class StocksCog(commands.Cog):
         if history.empty:
             raise ValueError(f"No data found for ticker '{ticker}'")
         price = history["Close"].iloc[-1]
-        return price
+        return round(price, 2)
 
     def get_price_graph(self, ticker, period="1mo"):
         data = yf.Ticker(ticker, session=self.session).history(period=period)
