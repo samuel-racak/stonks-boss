@@ -129,6 +129,12 @@ class StocksCog(commands.Cog):
         name="basic_info",
         description="Get basic information for a given ticker symbol.",
     )
+    @app_commands.choices(
+        exchange=[
+            app_commands.Choice(name=exchange, value=exchange)
+            for exchange in exchange_suffixes.keys()
+        ]
+    )
     async def basic_info(self, interaction, ticker: str):
         """Fetch name, sector, country, market_cap and currency for the specified ticker."""
         await interaction.response.defer()
