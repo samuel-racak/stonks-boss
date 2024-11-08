@@ -94,10 +94,9 @@ class AnalysisCog(commands.Cog):
         """Calculate Bollinger Bands for the specified ticker."""
         # Fetch historical data
         try:
-        stock_data = yf.download(
+            stock_data = yf.download(
                 ticker, period="3mo", interval="1d", session=self.session
-        )  # get data for the last 3 months so that we don't get null values for the rolling mean and standard deviation
-
+            )  # get data for the last 3 months so that we don't get null values for the rolling mean and standard deviation
             if stock_data.empty:
                 raise Exception("No data found for the specified ticker.")
         except Exception as e:
