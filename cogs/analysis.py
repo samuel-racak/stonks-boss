@@ -90,13 +90,52 @@ class AnalysisCog(commands.Cog):
         except Exception as e:
             await interaction.followup.send(f"An error occurred: {str(e)}")
 
+    @app_commands.command(
+        name="analytics",
+        description="Get analyst data for a given ticker symbol.",
+    )
+    @app_commands.choices(
+        exchange=[
+            app_commands.Choice(name=exchange, value=exchange)
+            for exchange in exchange_suffixes.keys()
+        ]
+    )
+    async def analytics(self, interaction, ticker: str, exchange: str = "NYSE"):
+        # Fetch what analysts say for the specified ticker.
+        await interaction.response.defer()
+        ticker = get_full_ticker(ticker, exchange)
+
+        if not is_valid_ticker(ticker, session=self.session):
+            await interaction.followup.send(
+                f"The ticker '{ticker}' is not valid. Please check and try again."
+            )
+            return
+
+        try:
+            news_data = self.get_analyst_data(ticker)
+
+            embed = Embed(
+                title=f"Analyst Data for {ticker.upper()}",
+                description="Analyst data for the specified ticker.",
+                color=EMBED_COLOR_PRIMARY,
+            )
+
+            for key, value in news_data.items():
+                embed.add_field(name=key, value=value)
+            embed.set_footer(text=FOOTER_TEXT)
+
+            await interaction.followup.send(embed=embed)
+
+        except Exception as e:
+            await interaction.followup.send(f"An error occurred: {str(e)}")
+
     def get_bollinger_bands(self, ticker):
         """Calculate Bollinger Bands for the specified ticker."""
         # Fetch historical data
         try:
-        stock_data = yf.download(
+            stock_data = yf.download(
                 ticker, period="3mo", interval="1d", session=self.session
-        )  # get data for the last 3 months so that we don't get null values for the rolling mean and standard deviation
+            )  # get data for the last 3 months so that we don't get null values for the rolling mean and standard deviation
 
             if stock_data.empty:
                 raise Exception("No data found for the specified ticker.")
@@ -173,7 +212,36 @@ class AnalysisCog(commands.Cog):
 
         return image_stream
 
+    def get_analyst_data(self, ticker):
+        """Fetch analyst data for the specified ticker."""
+        stock_data = yf.Ticker(ticker, session=self.session)
+        # save the data to csv file
+        # stock_data.recommendations_summary.to_csv("analyst_data.csv")
+        # stock_data.recommendations.to_csv("other_analyst_data.csv")
+        # data = stock_data.get_earnings_estimate()
+        other_data = stock_data.get_calendar()
+        for k, v in other_data.items():
+            print(k, v)
+
+        # # dividends
+        # dividends = stock_data.get_dividends()
+        # print(dividends)
+
+        # for k, v in stock_data.fast_info.items():
+        #     print(k, v)
+
+        # data.to_csv("analyst_data.csv")
+        stock_data.financials.to_csv("financials.csv")
+        stock_data.actions.to_csv("actions.csv")
+
+        return stock_data.recommendations_summary
+
 
 # Called when the cog is loaded
 async def setup(bot):
     await bot.add_cog(AnalysisCog(bot, bot.session))
+
+
+# Testing the cog
+instance = AnalysisCog(None, None)
+instance.get_analyst_data("AAPL")
