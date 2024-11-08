@@ -8,8 +8,6 @@ def is_valid_ticker(ticker, session):
         stock_data = yf.Ticker(ticker, session=session)
         info = stock_data.info
 
-        print(f"Ticker type IS_VALID: {type(ticker)}")  # Should be <class 'str'>
-
         return (
             info is not None and "symbol" in info and info["symbol"] == ticker.upper()
         )
