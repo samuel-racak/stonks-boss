@@ -1,7 +1,12 @@
 from discord.ext import commands
-from discord import app_commands, Embed
+from discord import app_commands, Embed, File
 import yfinance as yf
 
+# Libraries for creating graphs
+import matplotlib.pyplot as plt
+import io
+
+plt.switch_backend("Agg")  # Change the backend to Agg to avoid displaying the graph
 
 # Import utils
 from cogs.utils import is_valid_ticker
@@ -35,15 +40,43 @@ class AnalysisCog(commands.Cog):
             return
 
         try:
-            data = self.get_bollinger_bands(ticker)
-            await interaction.followup.send(f"Bollinger Bands for {ticker}:\n{data}")
+            last_bollinger_data, graph_data = self.get_bollinger_bands(ticker)
+            image_stream = self.get_bollinger_bands_graph(ticker, graph_data)
+
+            embed = Embed(
+                title=f"Bollinger Bands for {ticker.upper()}",
+                description="The Bollinger Bands are a volatility indicator that consists of a simple moving average and two standard deviations.",
+                color=EMBED_COLOR_PRIMARY,
+            )
+            embed.set_image(url="attachment://bollinger.png")
+            embed.add_field(
+                name="Close Price (Current Price)",
+                value=last_bollinger_data.get("Close", "N/A"),
+                inline=False,
+            )
+            embed.add_field(
+                name="Lower Band", value=last_bollinger_data.get("Lower Band", "N/A")
+            )
+            embed.add_field(
+                name="Upper Band", value=last_bollinger_data.get("Upper Band", "N/A")
+            )
+            embed.set_footer(text=FOOTER_TEXT)
+
+            await interaction.followup.send(
+                embed=embed, file=File(image_stream, filename="bollinger.png")
+            )
         except Exception as e:
             await interaction.followup.send(f"An error occurred: {str(e)}")
 
     def get_bollinger_bands(self, ticker):
         """Calculate Bollinger Bands for the specified ticker."""
         # Fetch historical data
-        stock_data = yf.download(ticker, period="1mo", interval="1d")
+        stock_data = yf.download(
+            ticker, period="3mo", interval="1d"
+        )  # get data for the last 3 months so that we don't get null values for the rolling mean and standard deviation
+
+        # trim the data to the last 40 days to get the most recent data for the graph while keeping all data for graphing purposes
+        stock_data = stock_data[-40:]
 
         # Calculate the rolling mean and rolling standard deviation
         stock_data["MA"] = stock_data["Close"].rolling(window=20).mean()
@@ -55,7 +88,62 @@ class AnalysisCog(commands.Cog):
 
         # Return the most recent values
         latest_data = stock_data[["Close", "Upper Band", "Lower Band"]].tail(1)
-        return latest_data.to_string(index=False)
+
+        # Flatten the DataFrame to a dictionary (assign column names)
+        latest_data.columns = ["Close", "Upper Band", "Lower Band"]
+        latest_data = latest_data.to_dict(orient="records")[0]
+
+        # Round the values to two decimal places
+        latest_data = {k: round(v, 2) for k, v in latest_data.items()}
+
+        return (
+            latest_data,
+            stock_data[-20:],
+        )  # Return the last 20 days of data (Medium term)
+
+    def get_bollinger_bands_graph(self, ticker, stock_data):
+        """Plot the Bollinger Bands for the specified ticker."""
+
+        # Create the plot
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.plot(
+            stock_data.index, stock_data["Close"], label="Close Price", color="blue"
+        )
+        ax.plot(
+            stock_data.index,
+            stock_data["Upper Band"],
+            label="Upper Band",
+            color="red",
+            linestyle="--",
+        )
+        ax.plot(
+            stock_data.index,
+            stock_data["Lower Band"],
+            label="Lower Band",
+            color="red",
+            linestyle="--",
+        )
+        ax.plot(
+            stock_data.index,
+            stock_data["MA"],
+            label="Moving Average",
+            color="green",
+            linestyle="-.",
+        )
+
+        ax.set_xlabel("Date")
+        ax.set_ylabel("Price")
+        ax.set_title(f"Bollinger Bands for {ticker.upper()}")
+        ax.legend()
+
+        # Save the plot to a BytesIO object
+        image_stream = io.BytesIO()
+        plt.savefig(image_stream, format="png")
+
+        # Seek to the beginning of the stream for reading
+        image_stream.seek(0)
+
+        return image_stream
 
 
 # Called when the cog is loaded
