@@ -2,6 +2,10 @@ from discord.ext import commands
 from discord import app_commands, Embed, File
 import yfinance as yf
 
+# Libararies for multi-threading
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+
 # Libraries for creating graphs
 import matplotlib.pyplot as plt
 import io
@@ -9,7 +13,7 @@ import io
 plt.switch_backend("Agg")  # Change the backend to Agg to avoid displaying the graph
 
 # Import utils
-from cogs.utils import is_valid_ticker
+from cogs.utils import is_valid_ticker, get_full_ticker, exchange_suffixes
 
 # Import constants
 from constants import EMBED_COLOR_PRIMARY, FOOTER_TEXT
@@ -25,14 +29,30 @@ class AnalysisCog(commands.Cog):
         self.bot = bot
         # Use a single session across the class to cache and limit requests
         self.session = session
+        self.executor = (
+            ThreadPoolExecutor()
+        )  # Create a ThreadPoolExecutor for multi-threading
+
+    async def run_in_executor(self, func, *args, **kwargs):
+        """Run a function in a separate thread using the ThreadPoolExecutor."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self.executor, func, *args, **kwargs)
 
     @app_commands.command(
         name="bollinger",
         description="Calculate Bollinger Bands for a given ticker symbol.",
     )
-    async def bollinger(self, interaction, ticker: str):
+    @app_commands.choices(
+        exchange=[
+            app_commands.Choice(name=exchange, value=exchange)
+            for exchange in exchange_suffixes.keys()
+        ]
+    )
+    async def bollinger(self, interaction, ticker: str, exchange: str = "NYSE"):
         """Fetch Bollinger Bands for the specified ticker."""
         await interaction.response.defer()
+        ticker = get_full_ticker(ticker, exchange)
+
         if not is_valid_ticker(ticker, session=self.session):
             await interaction.followup.send(
                 f"The ticker '{ticker}' is not valid. Please check and try again."
@@ -41,7 +61,9 @@ class AnalysisCog(commands.Cog):
 
         try:
             last_bollinger_data, graph_data = self.get_bollinger_bands(ticker)
-            image_stream = self.get_bollinger_bands_graph(ticker, graph_data)
+            image_stream = await self.run_in_executor(
+                self.get_bollinger_bands_graph, ticker, graph_data
+            )
 
             embed = Embed(
                 title=f"Bollinger Bands for {ticker.upper()}",
@@ -71,9 +93,15 @@ class AnalysisCog(commands.Cog):
     def get_bollinger_bands(self, ticker):
         """Calculate Bollinger Bands for the specified ticker."""
         # Fetch historical data
+        try:
         stock_data = yf.download(
-            ticker, period="3mo", interval="1d"
+                ticker, period="3mo", interval="1d", session=self.session
         )  # get data for the last 3 months so that we don't get null values for the rolling mean and standard deviation
+
+            if stock_data.empty:
+                raise Exception("No data found for the specified ticker.")
+        except Exception as e:
+            raise Exception(f"Failed to fetch data: {str(e)}")
 
         # trim the data to the last 40 days to get the most recent data for the graph while keeping all data for graphing purposes
         stock_data = stock_data[-40:]
